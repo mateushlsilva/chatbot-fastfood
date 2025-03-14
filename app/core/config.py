@@ -2,7 +2,6 @@ import os
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-# Carrega variáveis de ambiente do .env
 load_dotenv()
 
 class Config:
@@ -21,5 +20,5 @@ class Config:
             temperature=cls.TEMPERATURE
         )
 
-# Criando uma instância do LLM que pode ser usada em outras partes do código
+
 llm = Config.get_llm()
