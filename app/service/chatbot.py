@@ -1,9 +1,11 @@
-from app.core.config import llm
+from app.core.config import llm, vectorstore
 
 
 class ChatService:
     def __init__(self):
         self.llm = llm
+        self.retriever = vectorstore.as_retriever()
+
 
     def ask(self, question):
         messages = [
@@ -13,8 +15,8 @@ class ChatService:
         response = self.llm.invoke(messages)
         return response.content
     
-    def buscarCardapio():
-        pass
+    def buscarCardapio(self):
+        return vectorstore.get()
 
     def enviarPedidos():
         pass

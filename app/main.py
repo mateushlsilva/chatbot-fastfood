@@ -11,6 +11,8 @@ chatbot =  ChatService()
 
 @app.get("/")
 def read_root():
+    cardapio = chatbot.buscarCardapio()
+    print(cardapio)
     return {"Hello": "World"}
 
 @app.post("/conversa")
