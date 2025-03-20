@@ -1,4 +1,4 @@
-from app.core.config import llm, vectorstore
+from app.core.Config import llm, vectorstore
 from langchain_core.prompts import ChatPromptTemplate
 from typing import List, Union
 from langchain.tools import StructuredTool

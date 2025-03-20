@@ -1,6 +1,8 @@
-from fastapi import FastAPI
-from app.service.chatbot import ChatService
+from fastapi import FastAPI, Depends
+from app.service.Chatbot import ChatService
 from pydantic import BaseModel
+from app.middleware.Authorization import Authorization
+from typing import Tuple
 
 class QuestionRequest(BaseModel):
     question: str
@@ -8,15 +10,19 @@ class QuestionRequest(BaseModel):
 app = FastAPI()
 
 chatbot =  ChatService()
+user_middleware = Authorization()
+
 
 @app.get("/")
 def read_root():
-    cardapio = chatbot.buscarCardapio()
-    print(cardapio)
     return {"Hello": "World"}
+
+@app.get("/perfil")
+def get_perfil(user_info: Tuple[dict, str] = Depends(user_middleware)):
+    user, token = user_info
+    return {"message": "Perfil do usuário", "user": user, "token": token}
 
 @app.post("/conversa")
 def conversa(request: QuestionRequest):
     response = chatbot.ask(request.question)
-    #response = chatbot.buscarCardapio({"params":request.question})
     return {"question": request.question, "response": response}
