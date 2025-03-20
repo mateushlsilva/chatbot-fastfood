@@ -18,4 +18,5 @@ def read_root():
 @app.post("/conversa")
 def conversa(request: QuestionRequest):
     response = chatbot.ask(request.question)
+    #response = chatbot.buscarCardapio({"params":request.question})
     return {"question": request.question, "response": response}
