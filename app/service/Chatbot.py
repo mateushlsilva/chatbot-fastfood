@@ -5,6 +5,7 @@ from langchain.tools import StructuredTool
 from pydantic import BaseModel
 from langchain.agents import AgentType, initialize_agent
 import logging
+from app.model.Mongo import Mongo
 
 class BuscarCardapioParams(BaseModel):
     param: str = 'menu'
@@ -14,6 +15,7 @@ class EnviarPedidosParams(BaseModel):
 
 class ChatService:
     def __init__(self):
+        self.mongo = Mongo()
         self.llm = llm
         self.retriever = vectorstore.as_retriever()
         self.busca_tool = StructuredTool.from_function(
@@ -29,12 +31,32 @@ class ChatService:
             args_schema=EnviarPedidosParams
         )
         self.tools = [self.busca_tool, self.enviar_tool]
+        self.short_term_memory = {}
         logging.basicConfig(level=logging.INFO)
 
 
 
-    def ask(self, question):
+    def ask(self, question, user):
+        user_id = user['id']
+        name_user = user['name']
+
+        if user_id not in self.short_term_memory:
+            self.short_term_memory[user_id] = []
+
+        self.short_term_memory[user_id].append(f"Usuário: {question}")
+
+        if len(self.short_term_memory[user_id]) > 5:
+            self.short_term_memory[user_id].pop(0)
+
+        short_term_context = "\n".join(self.short_term_memory[user_id])
+
         template = """Você é um assistente amigável de um Fast Food. A sua missão é atender os clientes respondendo dúvidas e anotando pedidos.
+
+        Nome do usuário
+        {name_user}
+
+        Histórico recente da conversa:
+        {short_term_context}
 
         Use a ferramenta `buscarCardapio` para buscar informações sobre o cardápio. O parâmetro `param` deve conter o item que o usuário está procurando.
 
@@ -73,6 +95,8 @@ class ChatService:
             )
             result = response.invoke({"input": question})
             logging.info(f"Resposta do agente: {result}")
+            self.short_term_memory[user_id].append(f"Agente: {result['output']}")
+            self.mongo.save_chat_history(user_id=user['id'], question=question, response=result["output"])
             return result["output"]
         except Exception as e:
             logging.error(f"Erro ao executar o agente: {e}", exc_info=True)
@@ -121,6 +145,7 @@ class ChatService:
                 
         logging.info(f"Pedido recebido: {pedido.pedido}")
         return f"Pedido '{pedido.pedido}' anotado com sucesso!"
-
-    def vericarAuth():
-        pass
+    
+    def buscarHistorico(self, user_id):
+        return self.mongo.get_chat_history(user_id=user_id)
+    
