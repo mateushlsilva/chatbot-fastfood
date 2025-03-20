@@ -38,7 +38,8 @@ class ChatService:
 
         Use a ferramenta `buscarCardapio` para buscar informações sobre o cardápio. O parâmetro `param` deve conter o item que o usuário está procurando.
 
-        Use a ferramenta `enviarPedidos` para anotar o pedido do cliente. O parâmetro `pedido` deve conter o pedido completo do cliente.
+        Use a ferramenta `enviarPedidos` para anotar o pedido do cliente. Se um usuário pedir qualquer item do cardápio, registre esse pedido com a ferramenta `enviarPedidos`. O parâmetro `pedido` deve conter o pedido completo.
+
 
         Exemplo:
         Usuário: Qual o preço da pizza?
@@ -49,6 +50,9 @@ class ChatService:
 
         Usuário: Qual o menu?
         Agente: Action: `buscarCardapio`, Action Input: `param: menu`
+
+        Usuário: Eu quero uma pizza de calabresa.
+        Agente: Action: `enviarPedidos`, Action Input: `pedido: pizza de calabresa`
 
         {tools}
 
@@ -105,6 +109,17 @@ class ChatService:
 
     def enviarPedidos(self, pedido: EnviarPedidosParams) -> str:
         """Anota o pedido do cliente"""
+        print(f"Tipo de params: {type(pedido)}")
+        print(f"Valor de params: {pedido}")
+        if isinstance(pedido, str):
+            pedido = EnviarPedidosParams(pedido=pedido)
+        elif isinstance(pedido, dict):
+            if "pedido" in pedido:
+                pedido = EnviarPedidosParams(pedido=pedido["pedido"])
+            else:
+                raise ValueError("Formato inválido de 'pedido'")
+                
+        logging.info(f"Pedido recebido: {pedido.pedido}")
         return f"Pedido '{pedido.pedido}' anotado com sucesso!"
 
     def vericarAuth():
