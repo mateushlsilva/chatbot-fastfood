@@ -22,10 +22,6 @@ chatbot =  ChatService()
 user_middleware = Authorization()
 
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
-
 @app.get("/perfil")
 def get_perfil(user_info: Tuple[dict, str] = Depends(user_middleware)):
     user, token = user_info

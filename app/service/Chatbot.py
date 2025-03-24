@@ -16,6 +16,7 @@ class EnviarPedidosParams(BaseModel):
     pedido: str
     usuarioId: str 
 
+
 class ChatService:
     def __init__(self):
         self.mongo = Mongo()
@@ -34,8 +35,14 @@ class ChatService:
             description="Útil para enviar o pedido para o fast food, incluindo o ID do usuário.",
             args_schema=EnviarPedidosParams
         )
-        self.tools = [self.busca_tool, self.enviar_tool]
+        self.getIdUser_tool = StructuredTool.from_function(
+            func=self.getIdUser,
+            name="getIdUser",
+            description="Útil para pegar o ID do usuário."
+        )
+        self.tools = [self.busca_tool, self.enviar_tool, self.getIdUser_tool]
         self.short_term_memory = {}
+        self.usuarioId = ''
         logging.basicConfig(level=logging.INFO)
 
 
@@ -43,6 +50,7 @@ class ChatService:
     def ask(self, question, user):
         user_id = user['id']
         name_user = user['name']
+        self.usuarioId = user_id
 
         if user_id not in self.short_term_memory:
             self.short_term_memory[user_id] = []
@@ -57,7 +65,7 @@ class ChatService:
         template = """Você é um assistente amigável de um Fast Food. A sua missão é atender os clientes respondendo dúvidas e anotando pedidos.
 
             Nome do usuário: {name_user}
-            ID do usuário: {user_id}
+            ID do usuário: {usuarioId}
 
             Histórico recente da conversa:
             {short_term_context}
@@ -66,21 +74,22 @@ class ChatService:
 
             Use a ferramenta `enviarPedidos` para anotar o pedido do cliente. O parâmetro `pedido` deve conter o pedido completo e o parâmetro `usuarioId` deve conter o ID do usuário.
 
-            Use SEMPRE o ID correto do usuário ao chamar uma ferramenta. O ID do usuário é: {user_id}
-            ID do usuário correto: {user_id}. Nunca use outro ID.
+            Use SEMPRE o ID correto do usuário ao chamar uma ferramenta. O ID do usuário é: {usuarioId}
+            ID do usuário correto: {usuarioId}. Nunca use outro ID.
+            Nunca peça para o usuário informar o ID. Você já tem o ID correto: {usuarioId}
 
             Exemplo:
             Usuário: Qual o preço da pizza?
-            Agente: Action: `buscarCardapio`, Action Input: `param: pizza, usuarioId: {user_id}`
+            Agente: Action: `buscarCardapio`, Action Input: `param: pizza, usuarioId: {usuarioId}`
 
             Usuário: Eu quero uma pizza e uma coca.
-            Agente: Action: `enviarPedidos`, Action Input: `pedido: pizza e coca, usuarioId: {user_id}`
+            Agente: Action: `enviarPedidos`, Action Input: `pedido: pizza e coca, usuarioId: {usuarioId}`
 
             Usuário: Qual o menu?
-            Agente: Action: `buscarCardapio`, Action Input: `param: menu, usuarioId: {user_id}`
+            Agente: Action: `buscarCardapio`, Action Input: `param: menu, usuarioId: {usuarioId}`
 
             Usuário: Eu quero uma pizza de calabresa.
-            Agente: Action: `enviarPedidos`, Action Input: `pedido: pizza de calabresa, usuarioId: {user_id}`
+            Agente: Action: `enviarPedidos`, Action Input: `pedido: pizza de calabresa, usuarioId: {usuarioId}`
 
             {tools}
 
@@ -119,7 +128,7 @@ class ChatService:
         try:
             params = BuscarCardapioParams(param=param, usuarioId=usuarioId)
 
-            # Verifica se o usuário quer ver o cardápio inteiro
+           
             if "cardápio" in params.param.lower() or "menu" in params.param.lower():
                 print("Buscando menu completo...")
                 docs = vectorstore._client.get_collection(name='langchain').get()
@@ -148,6 +157,9 @@ class ChatService:
         
         logging.info(f"Pedido recebido: {pedido}")
         return f"Pedido '{pedido}' anotado com sucesso!"
+    
+    def getIdUser(self):
+        return self.usuarioId
 
     
     def buscarHistorico(self, user_id):
