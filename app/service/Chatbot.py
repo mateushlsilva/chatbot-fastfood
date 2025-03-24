@@ -1,17 +1,20 @@
 from app.core.Config import llm, vectorstore
 from langchain_core.prompts import ChatPromptTemplate
-from typing import List, Union
+from typing import List
 from langchain.tools import StructuredTool
 from pydantic import BaseModel
 from langchain.agents import AgentType, initialize_agent
 import logging
 from app.model.Mongo import Mongo
+import requests
 
 class BuscarCardapioParams(BaseModel):
     param: str = 'menu'
+    usuarioId: str 
 
 class EnviarPedidosParams(BaseModel):
     pedido: str
+    usuarioId: str 
 
 class ChatService:
     def __init__(self):
@@ -21,13 +24,14 @@ class ChatService:
         self.busca_tool = StructuredTool.from_function(
             func=self.buscarCardapio,
             name="buscarCardapio",
-            description="Útil para obter o cardápio do fast food.",
-            args_schema=BuscarCardapioParams
+            description="Útil para obter o cardápio do fast food. , incluindo o ID do usuário.",
+            args_schema=BuscarCardapioParams,
+            handle_tool_error=True
         )
         self.enviar_tool = StructuredTool.from_function(
             func=self.enviarPedidos,
             name="enviarPedidos",
-            description="Útil para enviar o pedido para o fast food.",
+            description="Útil para enviar o pedido para o fast food, incluindo o ID do usuário.",
             args_schema=EnviarPedidosParams
         )
         self.tools = [self.busca_tool, self.enviar_tool]
@@ -52,37 +56,41 @@ class ChatService:
 
         template = """Você é um assistente amigável de um Fast Food. A sua missão é atender os clientes respondendo dúvidas e anotando pedidos.
 
-        Nome do usuário
-        {name_user}
+            Nome do usuário: {name_user}
+            ID do usuário: {user_id}
 
-        Histórico recente da conversa:
-        {short_term_context}
+            Histórico recente da conversa:
+            {short_term_context}
 
-        Use a ferramenta `buscarCardapio` para buscar informações sobre o cardápio. O parâmetro `param` deve conter o item que o usuário está procurando.
+            Use a ferramenta `buscarCardapio` para buscar informações sobre o cardápio. O parâmetro `param` deve conter o item que o usuário está procurando e o parâmetro `usuarioId` deve conter o ID do usuário.
 
-        Use a ferramenta `enviarPedidos` para anotar o pedido do cliente. Se um usuário pedir qualquer item do cardápio, registre esse pedido com a ferramenta `enviarPedidos`. O parâmetro `pedido` deve conter o pedido completo.
+            Use a ferramenta `enviarPedidos` para anotar o pedido do cliente. O parâmetro `pedido` deve conter o pedido completo e o parâmetro `usuarioId` deve conter o ID do usuário.
+
+            Use SEMPRE o ID correto do usuário ao chamar uma ferramenta. O ID do usuário é: {user_id}
+            ID do usuário correto: {user_id}. Nunca use outro ID.
+
+            Exemplo:
+            Usuário: Qual o preço da pizza?
+            Agente: Action: `buscarCardapio`, Action Input: `param: pizza, usuarioId: {user_id}`
+
+            Usuário: Eu quero uma pizza e uma coca.
+            Agente: Action: `enviarPedidos`, Action Input: `pedido: pizza e coca, usuarioId: {user_id}`
+
+            Usuário: Qual o menu?
+            Agente: Action: `buscarCardapio`, Action Input: `param: menu, usuarioId: {user_id}`
+
+            Usuário: Eu quero uma pizza de calabresa.
+            Agente: Action: `enviarPedidos`, Action Input: `pedido: pizza de calabresa, usuarioId: {user_id}`
+
+            {tools}
+
+            {format_instructions}
+
+            {input}
+
+            {agent_scratchpad}"""
 
 
-        Exemplo:
-        Usuário: Qual o preço da pizza?
-        Agente: Action: `buscarCardapio`, Action Input: `param: pizza`
-
-        Usuário: Eu quero uma pizza e uma coca.
-        Agente: Action: `enviarPedidos`, Action Input: `pedido: pizza e coca`
-
-        Usuário: Qual o menu?
-        Agente: Action: `buscarCardapio`, Action Input: `param: menu`
-
-        Usuário: Eu quero uma pizza de calabresa.
-        Agente: Action: `enviarPedidos`, Action Input: `pedido: pizza de calabresa`
-
-        {tools}
-
-        {format_instructions}
-
-        {input}
-
-        {agent_scratchpad}"""
 
         prompt = ChatPromptTemplate.from_template(template)
         try:
@@ -93,7 +101,10 @@ class ChatService:
                 verbose=True,
                 agent_kwargs={"prompt": prompt},
             )
-            result = response.invoke({"input": question})
+            result = response.invoke({"input": question, 
+                "usuarioId": user_id,  
+                "name_user": name_user,
+                "short_term_context": short_term_context})
             logging.info(f"Resposta do agente: {result}")
             self.short_term_memory[user_id].append(f"Agente: {result['output']}")
             self.mongo.save_chat_history(user_id=user['id'], question=question, response=result["output"])
@@ -103,49 +114,43 @@ class ChatService:
             return f"Ocorreu um erro: {e}"
     
    
-    def buscarCardapio(self, params: dict) -> List[str]:
+    def buscarCardapio(self, param: str, usuarioId: str) -> List[str]:
         """Busca informações no banco vetorial sobre o cardápio com base em uma consulta."""
         try:
-            print(f"Tipo de params: {type(params)}")
-            print(f"Valor de params: {params}")
+            params = BuscarCardapioParams(param=param, usuarioId=usuarioId)
 
-            if isinstance(params, str):
-                params = BuscarCardapioParams(param=params)
-
-            elif isinstance(params, dict):
-                if "param" in params:  
-                    params = BuscarCardapioParams(param=params["param"])
-                else:  
-                    raise ValueError("Formato inválido de 'params'")
-
+            # Verifica se o usuário quer ver o cardápio inteiro
             if "cardápio" in params.param.lower() or "menu" in params.param.lower():
-                print("Ta no menu")
+                print("Buscando menu completo...")
                 docs = vectorstore._client.get_collection(name='langchain').get()
                 return docs["documents"]
 
-          
-            docs = vectorstore.similarity_search(params.param)
-            return [doc.page_content for doc in docs]
-
+            # Busca no banco vetorial
+            if params.param:
+                docs = vectorstore.similarity_search(params.param)
+                return [doc.page_content for doc in docs]
+            
+            return []
+        
         except Exception as e:
             logging.error(f"Erro ao buscar cardápio: {e}", exc_info=True)
             return []
 
-    def enviarPedidos(self, pedido: EnviarPedidosParams) -> str:
+
+    def enviarPedidos(self, pedido: str, usuarioId: str) -> str:
         """Anota o pedido do cliente"""
-        print(f"Tipo de params: {type(pedido)}")
-        print(f"Valor de params: {pedido}")
-        if isinstance(pedido, str):
-            pedido = EnviarPedidosParams(pedido=pedido)
-        elif isinstance(pedido, dict):
-            if "pedido" in pedido:
-                pedido = EnviarPedidosParams(pedido=pedido["pedido"])
-            else:
-                raise ValueError("Formato inválido de 'pedido'")
-                
-        logging.info(f"Pedido recebido: {pedido.pedido}")
-        return f"Pedido '{pedido.pedido}' anotado com sucesso!"
+        print(f"Pedido: {pedido}, Usuário ID: {usuarioId}")
+        
+        request = requests.post("http://127.0.0.1:8080/pedido", json={"pedido": pedido, "usuarioId": usuarioId})
+        
+        if request.status_code != 201:
+            return f"Erro ao enviar pedido: {request.text}"
+        
+        logging.info(f"Pedido recebido: {pedido}")
+        return f"Pedido '{pedido}' anotado com sucesso!"
+
     
     def buscarHistorico(self, user_id):
+        """Busca o histórico de conversas do usuário"""
         return self.mongo.get_chat_history(user_id=user_id)
     

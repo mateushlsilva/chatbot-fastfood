@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from app.service.Chatbot import ChatService
 from pydantic import BaseModel
 from app.middleware.Authorization import Authorization
@@ -8,6 +9,14 @@ class QuestionRequest(BaseModel):
     question: str
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 chatbot =  ChatService()
 user_middleware = Authorization()
