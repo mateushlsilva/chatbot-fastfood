@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  app:
+    image: mateushlsilva/chatbot:1.0
+    ports:
+      - "8000:8000"
+    depends_on:
+      - mongo
+    environment:
+      GOOGLE_API_KEY: SUA_API_KEY
+      CORE_API_URL: http://192.168.0.16:8080/user/me
+      CORE_API_URL_POST: http://192.168.0.16:8080/pedido
+      MONGO_URL: mongo:27017
+    volumes:
+      - .:/app
+
+  mongo:
+    image: mongo:latest
+    ports:
+      - "27018:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:

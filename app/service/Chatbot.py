@@ -7,6 +7,7 @@ from langchain.agents import AgentType, initialize_agent
 import logging
 from app.model.Mongo import Mongo
 import requests
+import os
 
 class BuscarCardapioParams(BaseModel):
     param: str = 'menu'
@@ -150,7 +151,7 @@ class ChatService:
         """Anota o pedido do cliente"""
         print(f"Pedido: {pedido}, Usuário ID: {usuarioId}")
         
-        request = requests.post("http://127.0.0.1:8080/pedido", json={"pedido": pedido, "usuarioId": usuarioId})
+        request = requests.post(os.getenv("CORE_API_URL_POST"), json={"pedido": pedido, "usuarioId": usuarioId})
         
         if request.status_code != 201:
             return f"Erro ao enviar pedido: {request.text}"
